@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario de Vida</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1 {
+            color: #333;
+        }
+        #controls {
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px 20px;
+            align-items: center;
+        }
+        label {
+            font-weight: bold;
+            text-align: right;
+        }
+        input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 80px;
+        }
+        button {
+            grid-column: 1 / -1; /* Span both columns */
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #lifeGrid {
+            display: grid;
+            /* Adjust grid size based on pixel size */
+            grid-template-columns: repeat(200, 3px);
+            grid-template-rows: repeat(200, 3px);
+            /* Remove gap if you want pixels touching */
+            /* gap: 1px; */
+            width: 600px; /* 200 columns * 3px */
+            height: 600px; /* 200 rows * 3px */
+            border: 1px solid #ccc;
+            background-color: #eee; /* Default background for the grid area */
+        }
+        .pixel {
+            width: 3px;
+            height: 3px;
+            background-color: #e0e0e0; /* Default color for uncalculated pixels */
+        }
+        .lived { background-color: #4a90e2; } /* Blue */
+        .remaining { background-color: #7ed321; } /* Green */
+        .lost-bad { background-color: #d0021b; } /* Red */
+        .gained-good { background-color: #f5a623; } /* Pink/Orange */
+
+        #legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Tu Vida en Días</h1>
+
+    <div id="controls">
+        <label for="age">Tu Edad (años):</label>
+        <input type="number" id="age" name="age" min="0" max="150" value="30">
+
+        <label for="cigarettes">Cigarrillos/día:</label>
+        <input type="number" id="cigarettes" name="cigarettes" min="0" value="0">
+
+        <label for="alcohol">Bebidas alcohólicas/semana:</label>
+        <input type="number" id="alcohol" name="alcohol" min="0" value="0">
+
+        <label for="exercise">Ejercicio (minutos/semana):</label>
+        <input type="number" id="exercise" name="exercise" min="0" value="0">
+
+        <button onclick="updateGrid()">Visualizar Mi Vida</button>
+    </div>
+
+    <div id="legend">
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #4a90e2;"></div>
+            <span>Días Vividos</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #7ed321;"></div>
+            <span>Días Por Vivir</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #d0021b;"></div>
+            <span>Días Perdidos (Hábitos)</span>
+        </div>
+         <div class="legend-item">
+            <div class="legend-color" style="background-color: #f5a623;"></div>
+            <span>Días Ganados (Ejercicio)</span>
+        </div>
+         <div class="legend-item">
+            <div class="legend-color" style="background-color: #e0e0e0;"></div>
+            <span>Fuera del Cálculo</span>
+        </div>
+    </div>
+
+    <div id="lifeGrid">
+        <!-- Pixels will be generated here by JavaScript -->
+    </div>
+
+    <script>
+        const gridContainer = document.getElementById('lifeGrid');
+        const gridSize = 200;
+        const totalPixels = gridSize * gridSize; // 40,000 days total visualization capacity
+        const daysInYear = 365.25; // Approximate including leap years
+
+        // --- Constants for Calculations ---
+        const minutesPerDay = 24 * 60;
+        const minutesLostPerCigarette = 20;
+
+        const alcoholBaselineDrinks = 18; // drinks per week
+        const alcoholBaselineYearsLost = 4;
+
+        const exerciseBaselineMinutes = 75; // minutes per week
+        const exerciseBaselineYearsGained = 2;
+
+        function createPixel(className) {
+            const pixel = document.createElement('div');
+            pixel.className = `pixel ${className}`;
+            return pixel;
+        }
+
+        function updateGrid() {
+            // 1. Get Input Values
+            const ageYears = parseInt(document.getElementById('age').value) || 0;
+            const cigarettesPerDay = parseInt(document.getElementById('cigarettes').value) || 0;
+            const alcoholPerWeek = parseInt(document.getElementById('alcohol').value) || 0;
+            const exerciseMinutesPerWeek = parseInt(document.getElementById('exercise').value) || 0;
+
+            // 2. Calculate Days
+            const daysLived = Math.round(ageYears * daysInYear);
+
+            // Calculate total potential minutes lost due to smoking over the *entire grid period*
+            // This represents the maximum potential impact shown at the end of the grid.
+            const totalPotentialMinutesLostSmoking = cigarettesPerDay * minutesLostPerCigarette * totalPixels;
+            const daysLostSmoking = Math.round(totalPotentialMinutesLostSmoking / minutesPerDay);
+
+            // Calculate days lost due to alcohol (proportional)
+            let daysLostAlcohol = 0;
+            if (alcoholBaselineDrinks > 0) {
+                const yearsLostAlcohol = (alcoholPerWeek / alcoholBaselineDrinks) * alcoholBaselineYearsLost;
+                daysLostAlcohol = Math.round(yearsLostAlcohol * daysInYear);
+            }
+
+            // Calculate days gained due to exercise (proportional)
+            let daysGainedExercise = 0;
+            if (exerciseBaselineMinutes > 0) {
+                const yearsGainedExercise = (exerciseMinutesPerWeek / exerciseBaselineMinutes) * exerciseBaselineYearsGained;
+                daysGainedExercise = Math.round(yearsGainedExercise * daysInYear);
+            }
+
+            const totalDaysLostBadHabits = Math.max(0, daysLostSmoking + daysLostAlcohol);
+            const totalDaysGainedGoodHabits = Math.max(0, daysGainedExercise);
+
+            // 3. Render Grid
+            gridContainer.innerHTML = ''; // Clear previous grid
+
+            // Determine the start index for each color block from the end
+            // Ensure indices don't go below daysLived or become invalid
+            const lastPixelIndex = totalPixels - 1;
+
+            // Start index for pink (gained days) - clamped at the beginning of remaining days
+            const pinkStartIndex = Math.max(daysLived, totalPixels - totalDaysGainedGoodHabits);
+
+            // Start index for red (lost days) - comes before pink, clamped at the beginning of remaining days
+            const redStartIndex = Math.max(daysLived, pinkStartIndex - totalDaysLostBadHabits);
+
+
+            for (let i = 0; i < totalPixels; i++) {
+                let pixelClass = 'remaining'; // Default to green (remaining)
+
+                if (i < daysLived) {
+                    pixelClass = 'lived'; // Blue
+                } else {
+                    // Check from the end backwards
+                    if (i >= pinkStartIndex) {
+                         // Only color pink if there are actually gained days affecting this pixel
+                        if (totalDaysGainedGoodHabits > (lastPixelIndex - i)) {
+                            pixelClass = 'gained-good'; // Pink/Orange
+                        }
+                    } else if (i >= redStartIndex) {
+                         // Only color red if there are actually lost days affecting this pixel
+                         // and it hasn't been colored pink
+                         if (totalDaysLostBadHabits > (pinkStartIndex - 1 - i)) {
+                             pixelClass = 'lost-bad'; // Red
+                         }
+                    }
+                    // Otherwise, it stays 'remaining' (Green)
+                }
+
+                gridContainer.appendChild(createPixel(pixelClass));
+            }
+        }
+
+        // Initial grid rendering on page load with default values
+        window.onload = updateGrid;
+    </script>
+
+</body>
+</html>
